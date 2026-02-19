@@ -15,11 +15,13 @@ import {
 } from "./lib/auth";
 import { loadHistory, saveHistory } from "./lib/storage";
 import { 
+import { 
   getParticipants, 
   addParticipant, 
   hasUserParticipated, 
   resetAllParticipants 
 } from "./lib/supabase";
+import { supabase } from "./lib/supabase";
 const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
 const MIN_SPIN_DURATION_MS = 4000;
 const MAX_SPIN_DURATION_MS = 5000;
