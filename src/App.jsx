@@ -14,6 +14,12 @@ import {
   saveGoogleSession,
 } from "./lib/auth";
 import { loadHistory, saveHistory } from "./lib/storage";
+import { 
+  getParticipants, 
+  addParticipant, 
+  hasUserParticipated, 
+  resetAllParticipants 
+} from "./lib/supabase";
 const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
 const MIN_SPIN_DURATION_MS = 4000;
 const MAX_SPIN_DURATION_MS = 5000;
@@ -58,15 +64,8 @@ function App() {
   const spinTimerRef = useRef(null);
   const [status, setStatus] = useState("로그인 상태를 확인하는 중...");
   const [user, setUser] = useState(null);
-  const [participants, setParticipants] = useState(() => {
-    try {
-      const raw = localStorage.getItem('roulette_participants_v2');
-      return raw ? JSON.parse(raw) : [];
-    } catch (error) {
-      console.error(error);
-      return [];
-    }
-  });
+  const [participants, setParticipants] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinDurationMs, setSpinDurationMs] = useState(3500);
@@ -78,19 +77,27 @@ function App() {
   const { kakaoJsKey, googleClientId } = useMemo(() => getEnv(), []);
   const kakaoEnabled = isConfiguredKakao(kakaoJsKey);
   const googleEnabled = isConfiguredGoogle(googleClientId);
+  // Supabase에서 참여자 목록 로드
+  useEffect(() => {
+    loadParticipantsFromSupabase();
+  }, []);
+  const loadParticipantsFromSupabase = async () => {
+    setIsLoading(true);
+    const data = await getParticipants();
+    setParticipants(data);
+    setIsLoading(false);
+  };
   const sortedParticipants = useMemo(
-    () => [...participants].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+    () => [...participants].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [participants],
   );
-  const userParticipation = useMemo(() => {
-    return null;
-  }, [user]);
-  const canSpin = Boolean(user) && !isSpinning;
+  // 관리자 체크
   const isAdmin = useMemo(() => {
     return user?.email === ADMIN_EMAIL;
   }, [user]);
+  const canSpin = Boolean(user) && !isSpinning;
   const revealAllResults = true;
-  const showHistoryPanel = (Boolean(lastResult) && participants.length > 0) || (isAdmin && participants.length > 0);
+  const showHistoryPanel = participants.length > 0;
   const spinHint = useMemo(() => {
     if (!user) return "로그인 후 참여할 수 있습니다.";
     if (isSpinning) return "룰렛이 돌아가는 중...";
@@ -227,14 +234,13 @@ function App() {
     setUser(null);
     setStatus("로그아웃되었습니다.");
   };
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!isAdmin) return;
     
     if (window.confirm('정말로 모든 참여자 기록을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
       try {
-        localStorage.removeItem('roulette_participants_v2');
-        localStorage.removeItem('roulette_draw_state_v1');
-        setParticipants([]);
+        await resetAllParticipants();
+        await loadParticipantsFromSupabase();
         setLastResult("");
         setStatus("모든 참여자 기록이 초기화되었습니다.");
       } catch (error) {
@@ -243,10 +249,17 @@ function App() {
       }
     }
   };
-  const handleSpin = () => {
+  const handleSpin = async () => {
     if (!user || isSpinning) return;
     const userKey = getUserKey(user);
     
+    // 1회 참여 제한 확인
+    setStatus("참여 여부 확인 중...");
+    const alreadyParticipated = await hasUserParticipated(userKey);
+    if (alreadyParticipated) {
+      setStatus("이미 참여하셨습니다. 한 계정당 1회만 참여 가능합니다.");
+      return;
+    }
     const selectedPrize = PRIZES[Math.floor(Math.random() * PRIZES.length)];
     const candidateSlotIndices = wheelSlots.map((slot, index) => ({ slot, index }))
       .filter(({ slot }) => slot === selectedPrize)
@@ -262,8 +275,9 @@ function App() {
     const nextSpinDuration = randomInt(MIN_SPIN_DURATION_MS, MAX_SPIN_DURATION_MS);
     setSpinDurationMs(nextSpinDuration);
     setIsSpinning(true);
+    setStatus("룰렛이 돌아가는 중...");
     setRotation(nextRotation);
-    spinTimerRef.current = window.setTimeout(() => {
+    spinTimerRef.current = window.setTimeout(async () => {
       const now = new Date().toISOString();
       const nextResult = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -279,23 +293,24 @@ function App() {
         result: selectedPrize,
         createdAt: now,
       };
-      const updatedParticipants = [...participants, nextParticipant];
-      setParticipants(updatedParticipants);
-      
       try {
-        localStorage.setItem('roulette_participants_v2', JSON.stringify(updatedParticipants));
+        // Supabase에 저장
+        await addParticipant(nextParticipant);
+        
+        // 목록 새로고침
+        await loadParticipantsFromSupabase();
+        const previousHistory = loadHistory(user);
+        saveHistory(user, [...previousHistory, nextResult]);
+        setLastResult(selectedPrize);
+        setModalResult(selectedPrize);
+        setShowResultModal(true);
+        setIsSpinning(false);
+        setStatus(`참여 완료: ${selectedPrize} 당첨`);
       } catch (error) {
-        console.error('Failed to save participants:', error);
+        console.error('Error saving to Supabase:', error);
+        setIsSpinning(false);
+        setStatus("참여 기록 저장 중 오류가 발생했습니다.");
       }
-      const previousHistory = loadHistory(user);
-      saveHistory(user, [...previousHistory, nextResult]);
-      setLastResult(selectedPrize);
-      setModalResult(selectedPrize);
-      setShowResultModal(true);
-      setIsSpinning(false);
-      setStatus(
-        `참여 완료: ${selectedPrize} 당첨 (총 ${updatedParticipants.length}명 참여)`,
-      );
     }, nextSpinDuration);
   };
   return (
@@ -329,7 +344,7 @@ function App() {
         </div>
         <h1>신년 소망 룰렛</h1>
         <p className="subtitle">
-          설날 분위기의 소망 룰렛입니다. 참여 인원 제한 없이 누구나 참여 가능하며, 결과는 중복될 수 있습니다.
+          설날 분위기의 소망 룰렛입니다. 한 계정당 1회 참여 가능하며, 전체 참여자 목록을 실시간으로 확인할 수 있습니다.
         </p>
         <AuthPanel
           status={status}
@@ -341,23 +356,36 @@ function App() {
           onGoogleSuccess={handleGoogleSuccess}
           onGoogleError={handleGoogleError}
         />
-        <div className={`main-grid ${showHistoryPanel ? "has-history" : "solo"}`}>
-          <RouletteBoard
-            missions={wheelSlots}
-            segmentColors={wheelColors}
-            rotation={rotation}
-            isSpinning={isSpinning}
-            lastResult={lastResult}
-            canSpin={canSpin}
-            onSpin={handleSpin}
-            spinHint={spinHint}
-            spinDurationMs={spinDurationMs}
-            revealLabels={Boolean(lastResult)}
-          />
-          {showHistoryPanel && (
-            <HistoryPanel participants={sortedParticipants} revealResults={true} />
-          )}
-        </div>
+        
+        {isLoading ? (
+          <p style={{ textAlign: 'center', padding: '20px' }}>데이터 로딩 중...</p>
+        ) : (
+          <div className={`main-grid ${showHistoryPanel ? "has-history" : "solo"}`}>
+            <RouletteBoard
+              missions={wheelSlots}
+              segmentColors={wheelColors}
+              rotation={rotation}
+              isSpinning={isSpinning}
+              lastResult={lastResult}
+              canSpin={canSpin}
+              onSpin={handleSpin}
+              spinHint={spinHint}
+              spinDurationMs={spinDurationMs}
+              revealLabels={Boolean(lastResult)}
+            />
+            {showHistoryPanel && (
+              <HistoryPanel 
+                participants={sortedParticipants.map(p => ({
+                  userKey: p.user_key,
+                  name: p.name,
+                  result: p.result,
+                  createdAt: p.created_at
+                }))} 
+                revealResults={true} 
+              />
+            )}
+          </div>
+        )}
         {showResultModal && (
           <div className="result-modal-backdrop" role="dialog" aria-modal="true" aria-label="룰렛 결과">
             <div className="result-modal">
