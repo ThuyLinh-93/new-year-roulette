@@ -245,7 +245,7 @@ function App() {
         setStatus("모든 참여자 기록이 초기화되었습니다.");
       } catch (error) {
         console.error('Failed to reset participants:', error);
-        setStatus("초기화 중 오류가 발생했습니다.");
+        setStatus("초기화 중 오류가 발생했습니다: " + error.message);
       }
     }
   };
