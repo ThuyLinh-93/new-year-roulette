@@ -234,31 +234,30 @@ function App() {
   const handleGoogleError = () => {
     setStatus("구글 로그인에 실패했습니다. 브라우저 설정(쿠키/추적차단/확장프로그램)도 확인해주세요.");
   };
-    const handleLogout = () => {
-    if (window.Kakao?.Auth?.getAccessToken()) {
-      window.Kakao.Auth.logout(() => {
-        // 초기화
-        setUser(null);
-        setLastResult("");
-        localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
-        setStatus("로그아웃되었습니다.");
-      });
-      return;
-    }
-    if (user?.provider === "Google") {
-      clearGoogleSession();
-      // 초기화
+  const handleLogout = () => {
+  if (window.Kakao?.Auth?.getAccessToken()) {
+    window.Kakao.Auth.logout(() => {
       setUser(null);
       setLastResult("");
-      localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
+      localStorage.removeItem(LAST_RESULT_KEY);
       setStatus("로그아웃되었습니다.");
-      return;
-    }
-    // 기타 로그아웃
+    });
+    return;
+  }
+  
+  if (user?.provider === "Google") {
+    clearGoogleSession();
     setUser(null);
     setLastResult("");
-    localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
+    localStorage.removeItem(LAST_RESULT_KEY);
     setStatus("로그아웃되었습니다.");
+    return;
+  }
+  
+  setUser(null);
+  setLastResult("");
+  localStorage.removeItem(LAST_RESULT_KEY);
+  setStatus("로그아웃되었습니다.");
   };
   const handleReset = async () => {
     if (!isAdmin) {
