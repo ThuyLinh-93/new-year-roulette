@@ -14,6 +14,7 @@ import {
   saveGoogleSession,
 } from "./lib/auth";
 import { loadHistory, saveHistory } from "./lib/storage";
+import { supabase } from "./lib/supabase";
 const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
 const MIN_SPIN_DURATION_MS = 4000;
 const MAX_SPIN_DURATION_MS = 5000;
@@ -227,11 +228,20 @@ function App() {
     setUser(null);
     setStatus("로그아웃되었습니다.");
   };
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!isAdmin) return;
     
     if (window.confirm('정말로 모든 참여자 기록을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
       try {
+        // Supabase에서 모든 데이터 삭제
+        const { error } = await supabase
+          .from('participants')
+          .delete()
+          .neq('id', 0);
+        
+        if (error) throw error;
+        
+        // 로컬 상태도 초기화
         localStorage.removeItem('roulette_participants_v2');
         localStorage.removeItem('roulette_draw_state_v1');
         setParticipants([]);
@@ -239,7 +249,7 @@ function App() {
         setStatus("모든 참여자 기록이 초기화되었습니다.");
       } catch (error) {
         console.error('Failed to reset participants:', error);
-        setStatus("초기화 중 오류가 발생했습니다.");
+        setStatus("초기화 중 오류가 발생했습니다: " + error.message);
       }
     }
   };
