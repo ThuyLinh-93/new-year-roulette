@@ -235,17 +235,34 @@ function App() {
     setStatus("로그아웃되었습니다.");
   };
   const handleReset = async () => {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      alert("관리자만 초기화할 수 있습니다.");
+      return;
+    }
     
     if (window.confirm('정말로 모든 참여자 기록을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
       try {
-        await resetAllParticipants();
+        setStatus("초기화 중...");
+        
+        // Supabase에서 직접 삭제
+        const { error } = await supabase
+          .from('participants')
+          .delete()
+          .neq('id', 0);
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
+        // 목록 새로고침
         await loadParticipantsFromSupabase();
         setLastResult("");
         setStatus("모든 참여자 기록이 초기화되었습니다.");
+        alert("초기화 완료!");
       } catch (error) {
-        console.error('Failed to reset participants:', error);
-        setStatus("초기화 중 오류가 발생했습니다: " + error.message);
+        console.error('Reset error:', error);
+        setStatus("초기화 실패: " + (error.message || "알 수 없는 오류"));
+        alert("초기화 실패: " + (error.message || "알 수 없는 오류"));
       }
     }
   };
