@@ -98,7 +98,8 @@ function App() {
   }, [user]);
   const canSpin = Boolean(user) && !isSpinning;
   const revealAllResults = true;
-  const showHistoryPanel = participants.length > 0;
+   // 참여자 명단 표시 조건: 로그인 + 룰렛 돌리기 완료 후
+  const showHistoryPanel = Boolean(user) && Boolean(lastResult) && participants.length > 0;
   const spinHint = useMemo(() => {
     if (!user) return "로그인 후 참여할 수 있습니다.";
     if (isSpinning) return "룰렛이 돌아가는 중...";
