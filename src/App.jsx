@@ -95,6 +95,7 @@ function App() {
       console.error('Failed to save last result:', error);
     }
   }, [lastResult]);
+  useEffect(() => {
     loadParticipantsFromSupabase();
   }, []);
   const loadParticipantsFromSupabase = async () => {
