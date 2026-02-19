@@ -24,6 +24,7 @@ import {
 const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
 const MIN_SPIN_DURATION_MS = 4000;
 const MAX_SPIN_DURATION_MS = 5000;
+const LAST_RESULT_KEY = 'roulette_last_result';  // ← 추가
 function normalizeAngle(deg) {
   return ((deg % 360) + 360) % 360;
 }
@@ -70,7 +71,13 @@ function App() {
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinDurationMs, setSpinDurationMs] = useState(3500);
-  const [lastResult, setLastResult] = useState("");
+  const [lastResult, setLastResult] = useState(() => {
+    try {
+      return localStorage.getItem(LAST_RESULT_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
   const [showResultModal, setShowResultModal] = useState(false);
   const [modalResult, setModalResult] = useState("");
   const [wheelSlots] = useState(() => makeWheelSlots());
@@ -80,6 +87,14 @@ function App() {
   const googleEnabled = isConfiguredGoogle(googleClientId);
   // Supabase에서 참여자 목록 로드
   useEffect(() => {
+    try {
+      if (lastResult) {
+        localStorage.setItem(LAST_RESULT_KEY, lastResult);
+      }
+    } catch (error) {
+      console.error('Failed to save last result:', error);
+    }
+  }, [lastResult]);
     loadParticipantsFromSupabase();
   }, []);
   const loadParticipantsFromSupabase = async () => {
@@ -219,21 +234,30 @@ function App() {
   const handleGoogleError = () => {
     setStatus("구글 로그인에 실패했습니다. 브라우저 설정(쿠키/추적차단/확장프로그램)도 확인해주세요.");
   };
-  const handleLogout = () => {
+    const handleLogout = () => {
     if (window.Kakao?.Auth?.getAccessToken()) {
       window.Kakao.Auth.logout(() => {
+        // 초기화
         setUser(null);
+        setLastResult("");
+        localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
         setStatus("로그아웃되었습니다.");
       });
       return;
     }
     if (user?.provider === "Google") {
       clearGoogleSession();
+      // 초기화
       setUser(null);
+      setLastResult("");
+      localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
       setStatus("로그아웃되었습니다.");
       return;
     }
+    // 기타 로그아웃
     setUser(null);
+    setLastResult("");
+    localStorage.removeItem(LAST_RESULT_KEY);  // ← 추가
     setStatus("로그아웃되었습니다.");
   };
   const handleReset = async () => {
