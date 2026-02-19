@@ -177,13 +177,13 @@ function App() {
       mounted = false;
     };
   }, [googleEnabled, kakaoEnabled, kakaoJsKey]);
-  useEffect(() => {
-    if (!user) {
-      setLastResult("");
-      return;
-    }
-    setLastResult("");
-  }, [user]);
+  // useEffect(() => {
+  //   if (!user) {
+  //     setLastResult("");
+  //     return;
+  //   }
+  //   setLastResult("");
+  // }, [user]);
   const handleLoginKakao = () => {
     if (!window.Kakao?.Auth || !kakaoEnabled) {
       setStatus("카카오 키를 확인하세요.");
